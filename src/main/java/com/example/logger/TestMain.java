@@ -1,46 +1,33 @@
 package com.example.logger;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-public class LoggerUtility {
-    private final Object lock = new Object();
-    private final String logFilePath;
-    private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+public class TestMain {
+    public static void main(String[] args) throws InterruptedException {
+        String logFilePath = "logs/app.log";
+        LoggerUtility logger = new LoggerUtility(logFilePath);
 
-    public LoggerUtility(String logFilePath) {
-        this.logFilePath = logFilePath;
-    }
+        ExecutorService executor = Executors.newFixedThreadPool(4);
 
-    // Simulate two resource locks to demonstrate potential deadlock
-    public void writeLogWithResources(String message, boolean acquireLock1First) {
-            synchronized (lock) {
-                writeLogInternal(message);
-            }
-        }
-
-    private void writeLogInternal(String message) {
-        String line = String.format("[%s] [%s] %s",
-                LocalDateTime.now().format(formatter),
-                Thread.currentThread().getName(),
-                message);
-                File file=new File(logFilePath);
-                File parent=file.getParentFile();
-                if(parent != null) {
-                    parent.mkdirs();
+        for (int i = 0; i < 4; i++) {
+            final int threadNum = i;
+            executor.submit(() -> {
+                String threadId = "T" + threadNum;
+                boolean acquireLock1First = threadNum % 2 == 0;
+                for (int m = 0; m < 15; m++) {
+                    logger.writeLogWithResources("Log from " + threadId + " - Message " + m, acquireLock1First);
+                    try {
+                        Thread.sleep(10);
+                    } catch (InterruptedException ignored) {}
                 }
-
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, true))) {
-            // for (char ch : line.toCharArray()) {
-                writer.write(line);
-                writer.newLine();
-                writer.flush();
-        } catch (IOException e) {
-            throw new RuntimeException("Unable to write log message", e);
+            });
         }
+
+        executor.shutdown();
+        while (!executor.isTerminated()) {
+            Thread.sleep(100);
+        }
+        System.out.println("Logging complete. Check the log file for results.");
     }
 }
